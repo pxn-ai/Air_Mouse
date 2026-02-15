@@ -1,10 +1,3 @@
-/*
-  Gyrometer - WORKING CODE
-  ESP32 code to read MPU6500 + HMC5883L, compute orientation with Madgwick filter,
-  and send quaternion over WiFi or Serial.
-        - PASAN_RK95
-*/
-
 #include "HMC5883L.h"
 #include <Arduino.h>
 #include <MPU9250_WE.h>
@@ -20,12 +13,12 @@
 #define WIFI_PASS "Pasan745"
 
 // ESP32 Static IP (must match your current WiFi network subnet)
-#define STATIC_IP 192, 168, 210, 50
-#define GATEWAY 192, 168, 210, 1
+#define STATIC_IP 192, 168, 1, 50
+#define GATEWAY 192, 168, 1, 1
 #define SUBNET 255, 255, 255, 0
 
 // Server (your Mac) — where UDP packets are sent
-#define SERVER_IP 192, 168, 210, 214
+#define SERVER_IP 192, 168, 1, 100
 #define UDP_PORT 4210
 
 // ╔══════════════════════════════════════════════════╗

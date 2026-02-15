@@ -57,6 +57,11 @@ bool magConnected = true;
 bool useWiFi = false;
 bool wifiEverConnected = false;
 
+// ── EMA smoothing ──
+const float EMA_ALPHA = 0.15f; // lower = smoother but more lag
+float smoothRoll = 0, smoothPitch = 0, smoothYaw = 0;
+bool emaInitialized = false;
+
 // Static IP objects
 IPAddress staticIP(STATIC_IP);
 IPAddress gateway(GATEWAY);
@@ -64,48 +69,37 @@ IPAddress subnet(SUBNET);
 IPAddress serverIP(SERVER_IP);
 
 // ── I2C health check ──
-bool checkI2CDevice(uint8_t addr)
-{
+bool checkI2CDevice(uint8_t addr) {
   Wire.beginTransmission(addr);
   return (Wire.endTransmission() == 0);
 }
 
 // ── Send a line over the active transport ──
-void sendLine(const String &line)
-{
-  if (useWiFi)
-  {
+void sendLine(const String &line) {
+  if (useWiFi) {
     udp.beginPacket(serverIP, UDP_PORT);
     udp.print(line);
     udp.endPacket();
-  }
-  else
-  {
+  } else {
     Serial.println(line);
-    Serial.flush(); // Ensure the entire line is transmitted before anything else prints
+    Serial.flush(); // Ensure the entire line is transmitted before anything
+                    // else prints
   }
 }
 
-// ── Quaternion conversion ──
-void eulerToQuaternion(float roll, float pitch, float yaw, float &qw, float &qx,
-                       float &qy, float &qz)
-{
-  float cr = cos(roll * DEG_TO_RAD * 0.5f);
-  float sr = sin(roll * DEG_TO_RAD * 0.5f);
-  float cp = cos(pitch * DEG_TO_RAD * 0.5f);
-  float sp = sin(pitch * DEG_TO_RAD * 0.5f);
-  float cy = cos(yaw * DEG_TO_RAD * 0.5f);
-  float sy = sin(yaw * DEG_TO_RAD * 0.5f);
-
-  qw = cr * cp * cy + sr * sp * sy;
-  qx = sr * cp * cy - cr * sp * sy;
-  qy = cr * sp * cy + sr * cp * sy;
-  qz = cr * cp * sy - sr * sp * cy;
+// ── Angle-aware EMA (handles wraparound) ──
+float emaAngle(float smoothed, float raw, float alpha) {
+  float diff = raw - smoothed;
+  // Wrap the difference to [-180, 180]
+  while (diff > 180.0f)
+    diff -= 360.0f;
+  while (diff < -180.0f)
+    diff += 360.0f;
+  return smoothed + alpha * diff;
 }
 
 // ── WiFi setup with timeout ──
-bool setupWiFi()
-{
+bool setupWiFi() {
   Serial.print("WiFi: Connecting to ");
   Serial.println(WIFI_SSID);
 
@@ -115,15 +109,13 @@ bool setupWiFi()
   WiFi.begin(WIFI_SSID, WIFI_PASS);
 
   unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 5000)
-  {
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 5000) {
     delay(100);
     Serial.print(".");
   }
   Serial.println();
 
-  if (WiFi.status() == WL_CONNECTED)
-  {
+  if (WiFi.status() == WL_CONNECTED) {
     Serial.print("WiFi: Connected! IP = ");
     Serial.println(WiFi.localIP());
     Serial.print("WiFi: Gateway: ");
@@ -135,9 +127,7 @@ bool setupWiFi()
 
     wifiEverConnected = true;
     return true;
-  }
-  else
-  {
+  } else {
     Serial.println("WiFi: FAILED — falling back to Serial");
     Serial.println("WIFI_FAIL");
     WiFi.disconnect(true);
@@ -145,8 +135,7 @@ bool setupWiFi()
   }
 }
 
-void setup()
-{
+void setup() {
   Serial.begin(921600);
   delay(500);
 
@@ -166,15 +155,11 @@ void setup()
   if (!magConnected)
     Serial.println("ERROR: HMC5883L not found!");
 
-  if (imuConnected)
-  {
-    if (!imu.init())
-    {
+  if (imuConnected) {
+    if (!imu.init()) {
       Serial.println("ERROR: MPU6500 init failed!");
       imuConnected = false;
-    }
-    else
-    {
+    } else {
       Serial.println("MPU6500: Calibrating...");
       imu.autoOffsets();
       Serial.println("MPU6500: Done.");
@@ -188,8 +173,7 @@ void setup()
     }
   }
 
-  if (magConnected)
-  {
+  if (magConnected) {
     mag.initialize();
     Serial.println("HMC5883L: Initialized.");
   }
@@ -203,35 +187,26 @@ void setup()
   sendLine(String("TRANSPORT,") + (useWiFi ? "wifi" : "serial"));
 }
 
-void loop()
-{
+void loop() {
   // ── WiFi watchdog ──
-  if (millis() - lastWiFiCheck >= 2000)
-  {
+  if (millis() - lastWiFiCheck >= 2000) {
     lastWiFiCheck = millis();
 
-    if (useWiFi && WiFi.status() != WL_CONNECTED)
-    {
+    if (useWiFi && WiFi.status() != WL_CONNECTED) {
       useWiFi = false;
       sendLine("TRANSPORT,serial");
-    }
-    else if (!useWiFi && wifiEverConnected)
-    {
-      if (WiFi.status() == WL_CONNECTED)
-      {
+    } else if (!useWiFi && wifiEverConnected) {
+      if (WiFi.status() == WL_CONNECTED) {
         useWiFi = true;
         sendLine("TRANSPORT,wifi");
-      }
-      else
-      {
+      } else {
         WiFi.begin(WIFI_SSID, WIFI_PASS);
       }
     }
   }
 
   // ── I2C health ──
-  if (millis() - lastStatusCheck >= 500)
-  {
+  if (millis() - lastStatusCheck >= 500) {
     lastStatusCheck = millis();
     imuConnected = checkI2CDevice(MPU6500_ADDR);
     magConnected = checkI2CDevice(HMC5883L_ADDR);
@@ -241,19 +216,16 @@ void loop()
   }
 
   // ── Sensor read ──
-  if (millis() - lastUpdate >= 10)
-  {
+  if (millis() - lastUpdate >= 10) {
     lastUpdate = millis();
 
-    if (imuConnected)
-    {
+    if (imuConnected) {
       xyzFloat a = imu.getGValues();
       xyzFloat g = imu.getGyrValues();
 
       float mx_ut = 0, my_ut = 0, mz_ut = 0;
       bool magValid = false;
-      if (magConnected)
-      {
+      if (magConnected) {
         int16_t mx_raw = 0, my_raw = 0, mz_raw = 0;
         mag.getHeading(&mx_raw, &my_raw, &mz_raw);
         mx_ut = (mx_raw - MAG_OFFSET_X) * MAG_SCALE_X * MAG_UT_PER_LSB;
@@ -264,12 +236,9 @@ void loop()
       }
 
       // Use 9-axis update only if mag data is valid, otherwise 6-axis
-      if (magValid)
-      {
+      if (magValid) {
         filter.update(g.x, g.y, g.z, a.x, a.y, a.z, mx_ut, my_ut, mz_ut);
-      }
-      else
-      {
+      } else {
         filter.updateIMU(g.x, g.y, g.z, a.x, a.y, a.z);
       }
 
@@ -278,24 +247,31 @@ void loop()
       float yaw = filter.getYaw();
 
       // Guard against nan (can happen during first few iterations)
-      if (!isnan(roll) && !isnan(pitch) && !isnan(yaw))
-      {
-        float qw, qx, qy, qz;
-        eulerToQuaternion(roll, pitch, yaw, qw, qx, qy, qz);
+      if (!isnan(roll) && !isnan(pitch) && !isnan(yaw)) {
+        // Apply EMA smoothing
+        if (!emaInitialized) {
+          smoothRoll = roll;
+          smoothPitch = pitch;
+          smoothYaw = yaw;
+          emaInitialized = true;
+        } else {
+          smoothRoll = emaAngle(smoothRoll, roll, EMA_ALPHA);
+          smoothPitch = emaAngle(smoothPitch, pitch, EMA_ALPHA);
+          smoothYaw = emaAngle(smoothYaw, yaw, EMA_ALPHA);
+        }
 
-        String quat = "QUAT," + String(qw, 4) + "," + String(qx, 4) + "," +
-                      String(qy, 4) + "," + String(qz, 4);
-        sendLine(quat);
+        String euler = "EULER," + String(smoothRoll, 2) + "," +
+                       String(smoothPitch, 2) + "," + String(smoothYaw, 2);
+        sendLine(euler);
       }
 
       // Periodic diagnostic (every 3 seconds)
-      if (millis() - lastDiag >= 3000)
-      {
+      if (millis() - lastDiag >= 3000) {
         lastDiag = millis();
-        Serial.printf("DIAG: a=(%.2f,%.2f,%.2f) g=(%.1f,%.1f,%.1f) m=(%.1f,%.1f,%.1f) magValid=%d RPY=(%.1f,%.1f,%.1f)\n",
-                      a.x, a.y, a.z, g.x, g.y, g.z,
-                      mx_ut, my_ut, mz_ut, magValid,
-                      roll, pitch, yaw);
+        Serial.printf("DIAG: a=(%.2f,%.2f,%.2f) g=(%.1f,%.1f,%.1f) "
+                      "m=(%.1f,%.1f,%.1f) magValid=%d RPY=(%.1f,%.1f,%.1f)\n",
+                      a.x, a.y, a.z, g.x, g.y, g.z, mx_ut, my_ut, mz_ut,
+                      magValid, roll, pitch, yaw);
       }
     }
   }

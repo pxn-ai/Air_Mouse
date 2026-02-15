@@ -14,9 +14,9 @@ app.jinja_env.auto_reload = True
 socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
 
 # Global state
-current_quat = [1.0, 0.0, 0.0, 0.0]
+current_euler = [0.0, 0.0, 0.0]  # roll, pitch, yaw
 running = True
-quat_count = 0
+euler_count = 0
 status_count = 0
 last_log_time = 0
 
@@ -51,43 +51,40 @@ def serial_scanner():
 
 def process_line(line):
     """Process a data line from either serial or UDP."""
-    global current_quat, quat_count, status_count, last_log_time
+    global current_euler, euler_count, status_count, last_log_time
     line = line.strip()
     if not line:
         return
 
     # Log unrecognized lines for debugging
-    if not (line.startswith('QUAT') or line.startswith('STATUS') or line.startswith('TRANSPORT')):
-        if not line.startswith('=') and not line.startswith('WiFi') and not line.startswith('MPU') and not line.startswith('HMC') and not line.startswith('ERROR'):
+    if not (line.startswith('EULER') or line.startswith('STATUS') or line.startswith('TRANSPORT')):
+        if not line.startswith('=') and not line.startswith('WiFi') and not line.startswith('MPU') and not line.startswith('HMC') and not line.startswith('ERROR') and not line.startswith('DIAG'):
             print(f"[WARN] Unknown line: {repr(line[:80])}")
         return
 
-    if line.startswith('QUAT'):
+    if line.startswith('EULER'):
         parts = line.split(',')
-        if len(parts) == 5:
+        if len(parts) == 4:
             try:
-                w = float(parts[1])
-                x = float(parts[2])
-                y = float(parts[3])
-                z = float(parts[4])
+                roll = float(parts[1])
+                pitch = float(parts[2])
+                yaw = float(parts[3])
                 # Reject nan/inf values
                 import math
-                if any(math.isnan(v) or math.isinf(v) for v in (w, x, y, z)):
+                if any(math.isnan(v) or math.isinf(v) for v in (roll, pitch, yaw)):
                     return
-                norm = (w*w + x*x + y*y + z*z)**0.5
-                if norm > 0:
-                    current_quat = [w/norm, x/norm, y/norm, z/norm]
-                socketio.emit('orientation_data', {'quat': current_quat})
-                quat_count += 1
+                current_euler = [roll, pitch, yaw]
+                socketio.emit('euler_data', {'roll': roll, 'pitch': pitch, 'yaw': yaw})
+                euler_count += 1
                 # Log stats every 5 seconds
                 now = time.time()
                 if now - last_log_time >= 5:
-                    print(f"[INFO] QUAT received: {quat_count} total | STATUS: {status_count} | last: w={w:.4f} x={x:.4f} y={y:.4f} z={z:.4f}")
+                    print(f"[INFO] EULER received: {euler_count} total | STATUS: {status_count} | roll={roll:.2f} pitch={pitch:.2f} yaw={yaw:.2f}")
                     last_log_time = now
             except ValueError as e:
-                print(f"[ERROR] Bad QUAT parse: {repr(line)} -> {e}")
+                print(f"[ERROR] Bad EULER parse: {repr(line)} -> {e}")
         else:
-            print(f"[ERROR] QUAT wrong field count ({len(parts)}): {repr(line[:80])}")
+            print(f"[ERROR] EULER wrong field count ({len(parts)}): {repr(line[:80])}")
 
     elif line.startswith('STATUS'):
         parts = line.split(',')

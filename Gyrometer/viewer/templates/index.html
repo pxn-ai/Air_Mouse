@@ -632,24 +632,10 @@
             }
         });
 
-        socket.on('orientation_data', (data) => {
-            // Only update if IMU is online (no data arrives anyway if IMU is offline)
-            const q = data.quat; // [w, x, y, z]
-            const w = q[0], x = q[1], y = q[2], z = q[3];
-
-            // Quaternion → Euler (ZYX intrinsic / XYZ extrinsic)
-            const sinr_cosp = 2 * (w * x + y * z);
-            const cosr_cosp = 1 - 2 * (x * x + y * y);
-            rawRoll = Math.atan2(sinr_cosp, cosr_cosp) * 180 / Math.PI;
-
-            const sinp = 2 * (w * y - z * x);
-            rawPitch = (Math.abs(sinp) >= 1)
-                ? Math.sign(sinp) * 90
-                : Math.asin(sinp) * 180 / Math.PI;
-
-            const siny_cosp = 2 * (w * z + x * y);
-            const cosy_cosp = 1 - 2 * (y * y + z * z);
-            rawYaw = Math.atan2(siny_cosp, cosy_cosp) * 180 / Math.PI;
+        socket.on('euler_data', (data) => {
+            rawRoll = data.roll;
+            rawPitch = data.pitch;
+            rawYaw = data.yaw;
 
             dispRoll = rawRoll - offsetRoll;
             dispPitch = rawPitch - offsetPitch;

@@ -33,7 +33,12 @@ def serial_scanner():
 
     # Filter out macOS system ports (not real USB devices)
     ignore = ['wlan-debug', 'Bluetooth', 'debug-console']
+    
+    usual_ports = { '/dev/cu.usbmodem101', '/dev/tty.usbmodem101', '/dev/cu.usbserial-A5069RR4', '/dev/tty.usbserial-A5069RR4' }
+
     ports = [p for p in ports if not any(bad in p for bad in ignore)]
+
+    ports = usual_ports.intersection(ports)
 
     result = []
     for port in ports:

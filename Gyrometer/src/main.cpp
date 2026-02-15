@@ -1,9 +1,9 @@
-"""
+/*
   Gyrometer - WORKING CODE
   ESP32 code to read MPU6500 + HMC5883L, compute orientation with Madgwick filter,
   and send quaternion over WiFi or Serial.
         - PASAN_RK95
-"""
+*/
 
 #include "HMC5883L.h"
 #include <Arduino.h>
@@ -16,7 +16,7 @@
 // ╔══════════════════════════════════════════════════╗
 // ║         USER CONFIGURATION — EDIT HERE          ║
 // ╚══════════════════════════════════════════════════╝
-#define WIFI_SSID "Janani's Galaxy A52"
+#define WIFI_SSID "TP-LINK_85596C"
 #define WIFI_PASS "Pasan745"
 
 // ESP32 Static IP (must match your current WiFi network subnet)
